@@ -5,7 +5,7 @@ pub struct Tokenizer {
 #[derive(Debug)]
 pub enum Token {
     Quote,
-    Digit,
+    Digit(char),
     Dot,
     Comma,
     Colon,
@@ -13,7 +13,7 @@ pub enum Token {
     LeftCurly,
     RightBracket,
     LeftBracket,
-    Char,
+    Char(char),
     NewLine,
     Whitespace,
     NotSupported,
@@ -58,8 +58,8 @@ impl Tokenizer {
                         self.new_line();
                         Token::NewLine
                     }
-                    '1'..='9' => Token::Digit,
-                    'a'..='z' | 'A'..='Z' => Token::Char,
+                    '1'..='9' => Token::Digit(c),
+                    'a'..='z' | 'A'..='Z' => Token::Char(c),
                     _ => Token::NotSupported,
                 };
 
