@@ -1,4 +1,5 @@
-use jsonp::lex::Tokenizer;
+use jsonp::parse::Parser;
+use jsonp::tokenize::Tokenizer;
 
 fn main() -> Result<(), String> {
     let source = match std::fs::read_to_string("src/sample.json") {
@@ -6,12 +7,11 @@ fn main() -> Result<(), String> {
         Err(err) => return Err(err.to_string()),
     };
 
-    let mut tokenizer = Tokenizer::new();
-    if let Ok(tokens) = tokenizer.tokenize(&source) {
-        for tok in tokens {
-            println!("{:?}", tok);
-        }
-    }
+    let mut tokenizer = Tokenizer::default();
+    let tokens = tokenizer.tokenize(&source)?;
+
+    let mut parser = Parser::new(tokens);
+    parser.parse()?;
 
     Ok(())
 }
