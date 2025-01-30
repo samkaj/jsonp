@@ -29,11 +29,11 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<JsonValue, String> {
+    pub fn parse(&mut self) -> Result<(), String> {
         self.remove_whitespace();
         self.parse_object()?;
 
-        Err("".to_string())
+        Ok(())
     }
 
     fn remove_whitespace(&mut self) {
@@ -45,11 +45,15 @@ impl Parser {
             .collect();
     }
 
-    fn parse_object(&mut self) -> Result<Json, String> {
+    fn parse_object(&mut self) -> Result<(), String> {
         self.assert_current(&[Token::LeftCurly])?;
 
         self.next_token()?;
         self.assert_current(&[Token::Quote, Token::RightCurly])?;
+
+        if self.current_token()?.0 == Token::RightCurly {
+            return Ok(());
+        }
 
         unimplemented!("parse object")
     }
