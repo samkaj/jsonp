@@ -31,9 +31,28 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<(), String> {
         self.remove_whitespace();
-        self.parse_object()?;
+        self.assert_current(&[Token::LeftCurly])?;
 
-        Ok(())
+        while !self.end_of_tokens() {
+            self.next_token()?;
+            self.assert_current(&[Token::Quote, Token::RightCurly])?;
+
+            // Empty object
+            if self.current_token()?.0 == Token::RightCurly {
+                return Ok(());
+            } else {
+                match self.parse_object() {
+                    Ok(obj) => {
+                        self.json.push(obj);
+                    }
+                    Err(err) => {
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
+        unimplemented!("parse object")
     }
 
     fn remove_whitespace(&mut self) {
@@ -45,17 +64,37 @@ impl Parser {
             .collect();
     }
 
-    fn parse_object(&mut self) -> Result<(), String> {
-        self.assert_current(&[Token::LeftCurly])?;
+    fn parse_object(&mut self) -> Result<Json, String> {
+        let key = self.parse_key();
 
+        todo!("{}", key.unwrap());
+    }
+
+    fn parse_key(&mut self) -> Result<String, String> {
+        self.assert_current(&[Token::Quote])?;
         self.next_token()?;
-        self.assert_current(&[Token::Quote, Token::RightCurly])?;
 
-        if self.current_token()?.0 == Token::RightCurly {
-            return Ok(());
+        let mut key = String::new();
+
+        while let Some((token, _)) = self.tokens.get(self.idx) {
+            match token {
+                Token::Char(c) => {
+                    key.push(*c);
+                    self.idx += 1;
+                }
+                Token::Quote => break,
+                _ => {
+                    return Err(format!(
+                        "TODO better error: Unexpected token {:?} in key",
+                        token
+                    ))
+                }
+            }
         }
 
-        unimplemented!("parse object")
+        self.next_token()?;
+
+        Ok(key)
     }
 
     /// Assert that the current token is one of the expected ones

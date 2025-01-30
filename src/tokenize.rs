@@ -22,6 +22,15 @@ pub enum Token {
     NotSupported,
 }
 
+impl Token {
+    pub fn is_char(&self) -> bool {
+        match self {
+            Token::Char(_) => true,
+            _ => false,
+        }
+    }
+}
+
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match *self {
@@ -77,35 +86,41 @@ impl Tokenizer {
             .chars()
             .map(|c| {
                 self.next_char();
-                let token: Token = match c {
-                    '"' => { 
-                        in_string = !in_string;
-                        Token::Quote
-                    },
-                    ':' => Token::Colon,
-                    '{' => Token::LeftCurly,
-                    '}' => Token::RightCurly,
-                    '[' => Token::LeftBracket,
-                    ']' => Token::RightBracket,
-                    ',' => Token::Comma,
-                    '.' => Token::Dot,
-                    ' ' | '\t' => {
-                        if in_string {
-                            Token::Char(c)
-                        } else {
-                            Token::Whitespace
-                        }
-                    }
-                    '\n' => {
+                if in_string {
+                    if c == '\n' {
                         self.new_line();
-                        Token::NewLine
+                        (Token::NewLine, self.pos)
+                    } else if c == '"' {
+                        in_string = !in_string;
+                        (Token::Quote, self.pos)
+                    } else {
+                        (Token::Char(c), self.pos)
                     }
-                    '1'..='9' => Token::Digit(c),
-                    'a'..='z' | 'A'..='Z' => Token::Char(c),
-                    _ => Token::NotSupported,
-                };
+                } else {
+                    let token = match c {
+                        '"' => {
+                            in_string = !in_string;
+                            Token::Quote
+                        }
+                        ':' => Token::Colon,
+                        '{' => Token::LeftCurly,
+                        '}' => Token::RightCurly,
+                        '[' => Token::LeftBracket,
+                        ']' => Token::RightBracket,
+                        ',' => Token::Comma,
+                        '.' => Token::Dot,
+                        ' ' | '\t' => Token::Whitespace,
+                        '\n' => {
+                            self.new_line();
+                            Token::NewLine
+                        }
+                        '0'..='9' => Token::Digit(c),
+                        'a'..='z' | 'A'..='Z' => Token::Char(c),
+                        _ => Token::NotSupported,
+                    };
 
-                (token, self.pos)
+                    (token, self.pos)
+                }
             })
             .collect())
     }
