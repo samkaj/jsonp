@@ -46,28 +46,33 @@ impl Parser {
     }
 
     fn parse_object(&mut self) -> Result<Json, String> {
-        self.assert_current(vec![Token::LeftCurly])?;
+        self.assert_current(&[Token::LeftCurly])?;
 
         self.next_token()?;
-        self.assert_current(vec![Token::Quote, Token::RightCurly])?;
+        self.assert_current(&[Token::Quote, Token::RightCurly])?;
 
         unimplemented!("parse object")
     }
 
     /// Assert that the current token is one of the expected ones
-    fn assert_current(&self, expected: Vec<Token>) -> Result<(), String> {
+    fn assert_current(&self, expected: &[Token]) -> Result<(), String> {
         let curr = self.current_token()?;
-        if !expected.iter().any(|x| *x == curr.0) {
-            let msg = expected
-                .iter()
-                .map(|x| x.to_string() + ",")
-                .collect::<String>();
-            Err(format!("Expected {} but got {} at {}", msg, curr.0, curr.1))
-        } else {
-            Ok(())
-        }
-    }
 
+        if expected.contains(&curr.0) {
+            return Ok(());
+        }
+
+        let expected_list = expected
+            .iter()
+            .map(Token::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        Err(format!(
+            "Expected {} but got {} at {}",
+            expected_list, curr.0, curr.1
+        ))
+    }
     /// Consume whitespaces and newlines until a new token is reached
     fn next_token(&mut self) -> Result<(), String> {
         self.idx += 1;
