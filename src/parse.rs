@@ -86,7 +86,7 @@ impl Parser {
         let current = self.current_token()?;
         let value = match current.0 {
             Token::Quote => JsonValue::Str(self.parse_string_literal()?),
-            Token::Digit(_) => self.parse_number()?,
+            Token::Digit(_) | Token::Minus => self.parse_number()?,
             _ => unimplemented!("token not implemented {}", current.0),
         };
 
@@ -107,6 +107,34 @@ impl Parser {
                 }
             }
             Token::Digit(d) => num.push(d),
+            Token::Minus => {
+                num.push('-');
+                self.next_token()?;
+                self.assert_current(&[Token::Digit(' ')])?;
+                let next = self.current_token()?;
+                match next.0 {
+                    Token::Digit('0') => {
+                        self.next_token()?;
+                        num.push('0');
+                        self.assert_current(&[Token::Dot])?;
+                        self.next_token()?;
+                        let (curr, pos) = self.current_token()?;
+                        match curr {
+                            Token::Digit(c) => num.push(c),
+                            _ => {
+                                return Err(format!(
+                                    "expected a digit at {}, but got {}",
+                                    pos, curr
+                                ))
+                            }
+                        }
+                    }
+                    Token::Digit(d) => {
+                        num.push(d);
+                    }
+                    d => return Err(format!("expected a digit at but got {}", d)),
+                }
+            }
             _ => {
                 return Err(format!(
                     "Expected a digit, got {} at {}",
@@ -180,8 +208,15 @@ impl Parser {
     fn assert_current(&self, expected: &[Token]) -> Result<(), String> {
         let curr = self.current_token()?;
 
-        if expected.contains(&curr.0) {
-            return Ok(());
+        for ex in expected {
+            let mat = match (ex, curr.0) {
+                (Token::Char(_), Token::Char(_)) | (Token::Digit(_), Token::Digit(_)) => true,
+                (a, b) => *a == b,
+            };
+
+            if mat {
+                return Ok(());
+            }
         }
 
         let expected_list = expected

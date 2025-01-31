@@ -12,6 +12,7 @@ pub enum Token {
     Dot,
     Comma,
     Colon,
+    Minus,
     RightCurly,
     LeftCurly,
     RightBracket,
@@ -39,6 +40,7 @@ impl Display for Token {
             Self::Dot => ".",
             Self::Comma => ",",
             Self::Colon => ":",
+            Self::Minus=> "-",
             Self::RightCurly => "}",
             Self::LeftCurly => "{",
             Self::RightBracket => "]",
@@ -103,6 +105,7 @@ impl Tokenizer {
                             Token::Quote
                         }
                         ':' => Token::Colon,
+                        '-' => Token::Minus,
                         '{' => Token::LeftCurly,
                         '}' => Token::RightCurly,
                         '[' => Token::LeftBracket,
