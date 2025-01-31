@@ -66,7 +66,7 @@ impl Parser {
             }
         }
 
-        unreachable!("well-formed json has returned, erroneous has crashed");
+        Ok(self.json.clone())
     }
 
     fn remove_whitespace(&mut self) {
@@ -84,13 +84,65 @@ impl Parser {
         self.next_token()?;
 
         let current = self.current_token()?;
-        self.next_token()?;
         let value = match current.0 {
             Token::Quote => JsonValue::Str(self.parse_string_literal()?),
+            Token::Digit(_) => self.parse_number()?,
             _ => unimplemented!("token not implemented {}", current.0),
         };
 
         Ok(Json::new(key, Box::new(value)))
+    }
+
+    fn parse_number(&mut self) -> Result<JsonValue, String> {
+        let current = self.current_token()?;
+        let mut num = String::new();
+        match current.0 {
+            Token::Digit('0') => {
+                num.push('0');
+                self.next_token()?;
+                self.assert_current(&[Token::Dot, Token::Comma, Token::RightCurly])?;
+                let next = self.current_token()?;
+                if next.0 == Token::Comma || next.0 == Token::RightCurly {
+                    return Ok(JsonValue::Int(0));
+                }
+            }
+            Token::Digit(d) => num.push(d),
+            _ => {
+                return Err(format!(
+                    "Expected a digit, got {} at {}",
+                    current.0, current.1
+                ))
+            }
+        }
+
+        self.next_token()?;
+
+        while let Ok((token, pos)) = self.current_token() {
+            match token {
+                Token::Dot => {
+                    if num.contains('.') {
+                        return Err("TODO error: Unexpected dot".to_string());
+                    }
+                    num.push('.');
+                }
+                Token::Digit(d) => num.push(d),
+                Token::Comma | Token::RightCurly | Token::RightBracket => break,
+                _ => return Err(format!("unexpected token {} at {}", token, pos)),
+            }
+            self.next_token()?;
+        }
+
+        if num.contains('.') {
+            return match num.parse::<f64>() {
+                Ok(f) => Ok(JsonValue::Float(f)),
+                Err(_) => Err("TODO error: failed to parse float".to_string()),
+            };
+        } else {
+            return match num.parse::<i64>() {
+                Ok(i) => Ok(JsonValue::Int(i)),
+                Err(_) => Err("TODO error: failed to parse float".to_string()),
+            };
+        }
     }
 
     fn parse_string_literal(&mut self) -> Result<String, String> {
@@ -144,10 +196,10 @@ impl Parser {
         ))
     }
     fn next_token(&mut self) -> Result<(), String> {
-        self.idx += 1;
         if self.end_of_tokens() {
             Err("no next token".to_string())
         } else {
+            self.idx += 1;
             Ok(())
         }
     }
