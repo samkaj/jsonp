@@ -2,7 +2,7 @@ use crate::tokenize::{Position, Token};
 
 #[derive(Clone, Debug)]
 pub enum JsonValue {
-    Object(Option<Box<Json>>),
+    Object(Option<Box<JsonValue>>),
     Float(f64),
     Int(i64),
     Str(String),
@@ -55,9 +55,12 @@ impl Parser {
             if self.current_token()?.0 == Token::RightCurly {
                 return Ok(self.json.clone());
             } else {
+                let key = self.parse_key()?;
+                self.assert_current(&[Token::Colon])?;
+                self.next_token()?;
                 match self.parse_object() {
                     Ok(obj) => {
-                        self.json.push(obj);
+                        self.json.push(Json::new(key, Box::new(obj)));
                     }
                     Err(err) => {
                         return Err(err);
@@ -78,19 +81,20 @@ impl Parser {
             .collect();
     }
 
-    fn parse_object(&mut self) -> Result<Json, String> {
-        let key = self.parse_key()?;
-        self.assert_current(&[Token::Colon])?;
-        self.next_token()?;
-
+    fn parse_object(&mut self) -> Result<JsonValue, String> {
         let current = self.current_token()?;
         let value = match current.0 {
             Token::Quote => JsonValue::Str(self.parse_string_literal()?),
             Token::Digit(_) | Token::Minus => self.parse_number()?,
+            Token::LeftCurly => {
+                self.next_token()?;
+                self.parse_object()?
+            }
+            Token::RightCurly => return Ok(JsonValue::Object(None)),
             _ => unimplemented!("token not implemented {}", current.0),
         };
 
-        Ok(Json::new(key, Box::new(value)))
+        Ok(JsonValue::Object(Some(Box::new(value))))
     }
 
     fn parse_number(&mut self) -> Result<JsonValue, String> {
