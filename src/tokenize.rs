@@ -39,7 +39,7 @@ impl Display for Token {
             Self::Dot => ".",
             Self::Comma => ",",
             Self::Colon => ":",
-            Self::RightCurly => "{",
+            Self::RightCurly => "}",
             Self::LeftCurly => "{",
             Self::RightBracket => "]",
             Self::LeftBracket => "[",

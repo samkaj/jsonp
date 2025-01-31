@@ -11,7 +11,8 @@ fn main() -> Result<(), String> {
     let tokens = tokenizer.tokenize(&source)?;
 
     let mut parser = Parser::new(tokens);
-    parser.parse()?;
+    let json = parser.parse()?;
+    dbg!(json);
 
     Ok(())
 }
