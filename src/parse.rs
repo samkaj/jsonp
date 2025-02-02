@@ -61,7 +61,8 @@ impl Parser {
             // Next is always an object, number, string, boolean, or array
             let json = match next {
                 Token::LeftCurly => self.parse_object(),
-                _ => unimplemented!(),
+                Token::Quote => self.parse_string_literal(),
+                _ => unimplemented!("in json func"),
             };
 
             dbg!(&json);
@@ -96,7 +97,8 @@ impl Parser {
         let (next, _) = self.current_token()?;
         let json = match next {
             Token::LeftCurly => self.parse_object(),
-            _ => unimplemented!(),
+            Token::Quote => self.parse_string_literal(),
+            _ => unimplemented!("in keyed obj func"),
         };
 
         Ok(JsonValue::KeyedObject(key, Box::new(json?)))
@@ -107,29 +109,26 @@ impl Parser {
     }
 
     fn parse_string_literal(&mut self) -> Result<JsonValue, String> {
-        unimplemented!("string literal")
+        self.assert_current(&[Token::Quote])?;
+        self.next_token()?;
+
+        let str = self.chars_to_string();
+
+        self.assert_current(&[Token::Quote])?;
+        self.next_token()?;
+
+        Ok(JsonValue::Str(str))
     }
 
     /// Parse a key (property name)
     /// Consumes: `"key" :`, leaves next token as e.g., `{`
     fn parse_key(&mut self) -> Result<String, String> {
-        (self.assert_current(&[Token::Quote])?);
+        self.assert_current(&[Token::Quote])?;
         self.next_token()?;
 
-        let key = self
-            .tokens
-            .iter()
-            .skip(self.idx)
-            .map_while(|(t, _)| match t {
-                Token::Char(c) => {
-                    self.idx += 1;
-                    Some(c)
-                }
-                _ => None,
-            })
-            .collect::<String>();
+        let key = self.chars_to_string();
 
-        (self.assert_current(&[Token::Quote])?);
+        self.assert_current(&[Token::Quote])?;
         self.next_token()?;
 
         Ok(key)
@@ -196,6 +195,23 @@ impl Parser {
         } else {
             Ok(self.tokens[self.idx + 1])
         }
+    }
+    /// Consumes char tokens from the current position.
+    /// Important: no assertions made here
+    fn chars_to_string(&mut self) -> String {
+        let key = self
+            .tokens
+            .iter()
+            .skip(self.idx)
+            .map_while(|(t, _)| match t {
+                Token::Char(c) => {
+                    self.idx += 1;
+                    Some(c)
+                }
+                _ => None,
+            })
+            .collect::<String>();
+        key
     }
 
     fn end_of_tokens(&self) -> bool {
