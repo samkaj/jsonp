@@ -35,19 +35,19 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match *self {
-            Self::Quote => r#"""#,
+            Self::Quote => "QUOTE",
             Self::Digit(d) => &format!("'{}'", d),
-            Self::Dot => ".",
-            Self::Comma => ",",
-            Self::Colon => ":",
-            Self::Minus=> "-",
-            Self::RightCurly => "}",
-            Self::LeftCurly => "{",
-            Self::RightBracket => "]",
-            Self::LeftBracket => "[",
+            Self::Dot => "DOT",
+            Self::Comma => "COMMA",
+            Self::Colon => "COLON",
+            Self::Minus=> "MINUS",
+            Self::RightCurly => "RIGHT_CURLY",
+            Self::LeftCurly => "LEFT_CURLY",
+            Self::RightBracket => "RIGHT_BRACKET",
+            Self::LeftBracket => "LEFT_BRACKET",
             Self::Char(c) => &format!("'{}'", c),
-            Self::NewLine => "a newline",
-            Self::Whitespace => "a whitespace",
+            Self::NewLine => "NEWLINE",
+            Self::Whitespace => "WHITESPACE",
             Self::NotSupported => unreachable!(),
         };
 
