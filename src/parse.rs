@@ -51,6 +51,10 @@ impl Parser {
                 break;
             }
 
+            if self.assert_current(&[Token::RightCurly]).is_ok() {
+                break;
+            }
+
             // Always expect a key.
             let key = self.parse_key()?;
             self.assert_current(&[Token::Colon])?;
@@ -65,7 +69,6 @@ impl Parser {
                 _ => unimplemented!("in json func"),
             };
 
-            dbg!(&json);
             self.json.push(JsonValue::KeyedObject(key, Box::new(json?)));
         }
 
@@ -77,17 +80,34 @@ impl Parser {
         self.assert_current(&[Token::LeftCurly])?;
         self.next_token()?;
 
-        // Expect a key or an empty object
-        self.assert_current(&[Token::RightCurly, Token::Quote])?;
-        let (next, pos) = self.current_token()?;
-        let json = match next {
-            Token::RightCurly => Ok(JsonValue::Empty),
-            Token::Quote => self.parse_keyed_object(),
-            _ => Err(format!("unexpected token `{next}` at {}", pos)),
-        };
+        if self.assert_current(&[Token::RightCurly]).is_ok() {
+            self.next_token()?;
+            return Ok(JsonValue::Empty);
+        }
 
-        self.next_token()?;
-        json
+        let mut objs: Vec<JsonValue> = vec![];
+        while self.assert_current(&[Token::RightCurly]).is_err() {
+            // Expect a key or an empty object
+            self.assert_current(&[Token::Quote, Token::Comma])?;
+            let (next, pos) = self.current_token()?;
+            let json = match next {
+                Token::Quote  => self.parse_keyed_object(),
+                Token::Comma => break,
+                _ => Err(format!("unexpected token `{next}` at {}", pos)),
+            };
+
+            if !self.last_token() {
+                self.next_token()?;
+            }
+
+            objs.push(json?);
+        }
+
+        if objs.is_empty() {
+            Ok(JsonValue::Empty)
+        } else {
+            Ok(JsonValue::Object(objs))
+        }
     }
 
     fn parse_keyed_object(&mut self) -> Result<JsonValue, String> {
@@ -123,6 +143,9 @@ impl Parser {
     /// Parse a key (property name)
     /// Consumes: `"key" :`, leaves next token as e.g., `{`
     fn parse_key(&mut self) -> Result<String, String> {
+        if self.assert_current(&[Token::Comma]).is_ok() {
+            self.next_token()?;
+        }
         self.assert_current(&[Token::Quote])?;
         self.next_token()?;
 
@@ -166,6 +189,7 @@ impl Parser {
             Err("reached end of tokens".to_string())
         } else {
             self.idx += 1;
+            println!("{}", self.current_token()?.0);
             Ok(())
         }
     }

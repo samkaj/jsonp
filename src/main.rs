@@ -13,6 +13,7 @@ fn main() -> Result<(), String> {
     let mut parser = Parser::new(tokens);
     let json = parser.parse()?;
     dbg!(json);
+    println!("✅");
 
     Ok(())
 }
