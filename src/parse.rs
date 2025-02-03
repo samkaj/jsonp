@@ -67,7 +67,8 @@ impl Parser {
                 Token::LeftCurly => self.parse_object(),
                 Token::Quote => self.parse_string_literal(),
                 Token::Char('t') | Token::Char('f') => self.parse_bool(),
-                _ => unimplemented!("in json func"),
+                Token::Digit(_) | Token::Minus => self.parse_number(),
+                _ => unimplemented!("in json func {}", next),
             };
 
             self.json.push(JsonValue::KeyedObject(key, Box::new(json?)));
@@ -120,6 +121,7 @@ impl Parser {
             Token::LeftCurly => self.parse_object(),
             Token::Quote => self.parse_string_literal(),
             Token::Char('t') | Token::Char('f') => self.parse_bool(),
+            Token::Digit(_) | Token::Minus => self.parse_number(),
             _ => unimplemented!("in keyed obj func"),
         };
 
@@ -127,7 +129,18 @@ impl Parser {
     }
 
     fn parse_number(&mut self) -> Result<JsonValue, String> {
-        unimplemented!("numbers")
+        let num = self.digits_to_string();
+        if num.contains('.') {
+            match num.parse::<f64>() {
+                Ok(f) => Ok(JsonValue::Float(f)),
+                Err(_) => Err(format!("failed to parse float {}", num)),
+            }
+        } else {
+            match num.parse::<i64>() {
+                Ok(i) => Ok(JsonValue::Int(i)),
+                Err(_) => Err(format!("failed to parse integer {}", num)),
+            }
+        }
     }
 
     fn parse_string_literal(&mut self) -> Result<JsonValue, String> {
@@ -250,6 +263,30 @@ impl Parser {
             })
             .collect::<String>();
         key
+    }
+
+    fn digits_to_string(&mut self) -> String {
+        let digits = self
+            .tokens
+            .iter()
+            .skip(self.idx)
+            .map_while(|(t, _)| match t {
+                Token::Digit(c) => {
+                    self.idx += 1;
+                    Some(c)
+                }
+                Token::Minus => {
+                    self.idx += 1;
+                    Some(&'-')
+                }
+                Token::Dot => {
+                    self.idx += 1;
+                    Some(&'.')
+                }
+                _ => None,
+            })
+            .collect::<String>();
+        digits
     }
 
     fn end_of_tokens(&self) -> bool {
