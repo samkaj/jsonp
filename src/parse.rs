@@ -66,6 +66,7 @@ impl Parser {
             let json = match next {
                 Token::LeftCurly => self.parse_object(),
                 Token::Quote => self.parse_string_literal(),
+                Token::Char('t') | Token::Char('f') => self.parse_bool(),
                 _ => unimplemented!("in json func"),
             };
 
@@ -91,7 +92,7 @@ impl Parser {
             self.assert_current(&[Token::Quote, Token::Comma])?;
             let (next, pos) = self.current_token()?;
             let json = match next {
-                Token::Quote  => self.parse_keyed_object(),
+                Token::Quote => self.parse_keyed_object(),
                 Token::Comma => break,
                 _ => Err(format!("unexpected token `{next}` at {}", pos)),
             };
@@ -118,6 +119,7 @@ impl Parser {
         let json = match next {
             Token::LeftCurly => self.parse_object(),
             Token::Quote => self.parse_string_literal(),
+            Token::Char('t') | Token::Char('f') => self.parse_bool(),
             _ => unimplemented!("in keyed obj func"),
         };
 
@@ -138,6 +140,17 @@ impl Parser {
         self.next_token()?;
 
         Ok(JsonValue::Str(str))
+    }
+
+    fn parse_bool(&mut self) -> Result<JsonValue, String> {
+        let str = self.chars_to_string();
+        if str == "true" {
+            Ok(JsonValue::Bool(true))
+        } else if str == "false" {
+            Ok(JsonValue::Bool(false))
+        } else {
+            Err("todo error: failed to parse boolean".to_string())
+        }
     }
 
     /// Parse a key (property name)
@@ -220,6 +233,7 @@ impl Parser {
             Ok(self.tokens[self.idx + 1])
         }
     }
+
     /// Consumes char tokens from the current position.
     /// Important: no assertions made here
     fn chars_to_string(&mut self) -> String {
