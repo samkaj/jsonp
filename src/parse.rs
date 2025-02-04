@@ -30,10 +30,14 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<Vec<JsonValue>, String> {
         self.remove_whitespace();
-        self.assert_current(&[Token::LeftCurly])?;
-        self.next_token()?;
+        self.assert_current(&[Token::LeftCurly, Token::LeftBracket])?;
+        if self.current_token()?.0 == Token::LeftBracket {
+            Ok(vec![self.parse_array()?])
+        } else {
+            self.next_token()?;
+            self.parse_json()
+        }
 
-        self.parse_json()
     }
 
     fn remove_whitespace(&mut self) {
@@ -52,6 +56,10 @@ impl Parser {
             }
 
             if self.assert_current(&[Token::RightCurly]).is_ok() {
+                self.next_token()?;
+                if self.assert_current(&[Token::RightCurly]).is_ok() {
+                    return Err("trailing right curlies".to_string());
+                }
                 break;
             }
 
@@ -68,6 +76,7 @@ impl Parser {
                 Token::Quote => self.parse_string_literal(),
                 Token::Char('t') | Token::Char('f') => self.parse_bool(),
                 Token::Digit(_) | Token::Minus => self.parse_number(),
+                Token::LeftBracket => self.parse_array(),
                 _ => unimplemented!("in json func {}", next),
             };
 
@@ -88,7 +97,7 @@ impl Parser {
         }
 
         let mut objs: Vec<JsonValue> = vec![];
-        while self.assert_current(&[Token::RightCurly]).is_err() {
+        while self.assert_current(&[Token::RightCurly, Token::RightBracket]).is_err() {
             // Expect a key or an empty object
             self.assert_current(&[Token::Quote, Token::Comma])?;
             let (next, pos) = self.current_token()?;
@@ -122,10 +131,33 @@ impl Parser {
             Token::Quote => self.parse_string_literal(),
             Token::Char('t') | Token::Char('f') => self.parse_bool(),
             Token::Digit(_) | Token::Minus => self.parse_number(),
+            Token::LeftBracket => self.parse_array(),
             _ => unimplemented!("in keyed obj func"),
         };
 
         Ok(JsonValue::KeyedObject(key, Box::new(json?)))
+    }
+
+    fn parse_array(&mut self) -> Result<JsonValue, String> {
+        let mut arr: Vec<JsonValue> = vec![];
+        while self.current_token()?.0 != Token::RightBracket {
+            self.next_token()?;
+            let (next, _) = self.current_token()?;
+            let json = match next {
+                Token::LeftCurly => self.parse_object(),
+                Token::Quote => self.parse_string_literal(),
+                Token::Char('t') | Token::Char('f') => self.parse_bool(),
+                Token::Digit(_) | Token::Minus => self.parse_number(),
+                Token::LeftBracket => self.parse_array(),
+                Token::RightBracket => break,
+                _ => unimplemented!("in arr func {}", next),
+            };
+
+            arr.push(json?);
+        }
+
+        self.next_token()?;
+        Ok(JsonValue::Arr(arr))
     }
 
     fn parse_number(&mut self) -> Result<JsonValue, String> {
@@ -212,10 +244,9 @@ impl Parser {
 
     fn next_token(&mut self) -> Result<(), String> {
         if self.end_of_tokens() {
-            Err("reached end of tokens".to_string())
+            Err("unterminated".to_string())
         } else {
             self.idx += 1;
-            println!("{}", self.current_token()?.0);
             Ok(())
         }
     }
