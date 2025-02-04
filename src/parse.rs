@@ -16,76 +16,25 @@ pub enum JsonValue {
 pub struct Parser {
     tokens: Vec<(Token, Position)>,
     idx: usize,
-    json: Vec<JsonValue>,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<(Token, Position)>) -> Self {
-        Parser {
-            tokens,
-            idx: 0,
-            json: vec![],
-        }
+        Parser { tokens, idx: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<JsonValue>, String> {
+    /// Parse a JSON document
+    pub fn parse(&mut self) -> Result<JsonValue, String> {
         self.remove_whitespace();
-        self.assert_current(&[Token::LeftCurly, Token::LeftBracket])?;
-        if self.current_token()?.0 == Token::LeftBracket {
-            Ok(vec![self.parse_array()?])
-        } else {
-            self.next_token()?;
-            self.parse_json()
+        let (first_token, _) = self.current_token()?;
+        match first_token {
+            Token::LeftBracket => self.parse_array(),
+            Token::LeftCurly => self.parse_object(),
+            _ => Err("invalid JSON document".to_string()),
         }
-
     }
 
-    fn remove_whitespace(&mut self) {
-        self.tokens = self
-            .tokens
-            .clone()
-            .into_iter()
-            .filter(|(x, _)| *x != Token::Whitespace && *x != Token::NewLine)
-            .collect();
-    }
-
-    fn parse_json(&mut self) -> Result<Vec<JsonValue>, String> {
-        while !self.end_of_tokens() {
-            if self.last_token() {
-                break;
-            }
-
-            if self.assert_current(&[Token::RightCurly]).is_ok() {
-                self.next_token()?;
-                if self.assert_current(&[Token::RightCurly]).is_ok() {
-                    return Err("trailing right curlies".to_string());
-                }
-                break;
-            }
-
-            // Always expect a key.
-            let key = self.parse_key()?;
-            self.assert_current(&[Token::Colon])?;
-            self.next_token()?;
-
-            let (next, _) = self.current_token()?;
-
-            // Next is always an object, number, string, boolean, or array
-            let json = match next {
-                Token::LeftCurly => self.parse_object(),
-                Token::Quote => self.parse_string_literal(),
-                Token::Char('t') | Token::Char('f') => self.parse_bool(),
-                Token::Digit(_) | Token::Minus => self.parse_number(),
-                Token::LeftBracket => self.parse_array(),
-                _ => unimplemented!("in json func {}", next),
-            };
-
-            self.json.push(JsonValue::KeyedObject(key, Box::new(json?)));
-        }
-
-        Ok(self.json.clone())
-    }
-
+    /// Parse a literal object
     fn parse_object(&mut self) -> Result<JsonValue, String> {
         // Assume {
         self.assert_current(&[Token::LeftCurly])?;
@@ -97,7 +46,10 @@ impl Parser {
         }
 
         let mut objs: Vec<JsonValue> = vec![];
-        while self.assert_current(&[Token::RightCurly, Token::RightBracket]).is_err() {
+        while self
+            .assert_current(&[Token::RightCurly, Token::RightBracket])
+            .is_err()
+        {
             // Expect a key or an empty object
             self.assert_current(&[Token::Quote, Token::Comma])?;
             let (next, pos) = self.current_token()?;
@@ -121,6 +73,8 @@ impl Parser {
         }
     }
 
+    /// Parse a keyed object
+    /// e.g., "key": {}
     fn parse_keyed_object(&mut self) -> Result<JsonValue, String> {
         let key = self.parse_key()?;
         self.assert_current(&[Token::Colon])?;
@@ -132,12 +86,13 @@ impl Parser {
             Token::Char('t') | Token::Char('f') => self.parse_bool(),
             Token::Digit(_) | Token::Minus => self.parse_number(),
             Token::LeftBracket => self.parse_array(),
-            _ => unimplemented!("in keyed obj func"),
+            _ => Err(format!("unexpected token while parsing object")),
         };
 
         Ok(JsonValue::KeyedObject(key, Box::new(json?)))
     }
 
+    /// Parse an array of json values
     fn parse_array(&mut self) -> Result<JsonValue, String> {
         let mut arr: Vec<JsonValue> = vec![];
         while self.current_token()?.0 != Token::RightBracket {
@@ -150,7 +105,7 @@ impl Parser {
                 Token::Digit(_) | Token::Minus => self.parse_number(),
                 Token::LeftBracket => self.parse_array(),
                 Token::RightBracket => break,
-                _ => unimplemented!("in arr func {}", next),
+                _ => Err(format!("unexpected token while parsing array: {}", next)),
             };
 
             arr.push(json?);
@@ -160,6 +115,7 @@ impl Parser {
         Ok(JsonValue::Arr(arr))
     }
 
+    /// Parse a number, resulting in either a float or an integer
     fn parse_number(&mut self) -> Result<JsonValue, String> {
         let num = self.digits_to_string();
         if num.contains('.') {
@@ -175,6 +131,8 @@ impl Parser {
         }
     }
 
+    /// Parse a string literal
+    /// e.g., "foo": "bar"
     fn parse_string_literal(&mut self) -> Result<JsonValue, String> {
         self.assert_current(&[Token::Quote])?;
         self.next_token()?;
@@ -187,6 +145,8 @@ impl Parser {
         Ok(JsonValue::Str(str))
     }
 
+    /// Parse a bool
+    /// e.g. "field": true
     fn parse_bool(&mut self) -> Result<JsonValue, String> {
         let str = self.chars_to_string();
         if str == "true" {
@@ -194,7 +154,7 @@ impl Parser {
         } else if str == "false" {
             Ok(JsonValue::Bool(false))
         } else {
-            Err("todo error: failed to parse boolean".to_string())
+            Err("failed to parse boolean".to_string())
         }
     }
 
@@ -242,42 +202,6 @@ impl Parser {
         ))
     }
 
-    fn next_token(&mut self) -> Result<(), String> {
-        if self.end_of_tokens() {
-            Err("unterminated".to_string())
-        } else {
-            self.idx += 1;
-            Ok(())
-        }
-    }
-
-    /// Get the current token if it exists
-    fn current_token(&self) -> Result<(Token, Position), String> {
-        if self.end_of_tokens() {
-            Err("unexpected end of file".to_string())
-        } else {
-            Ok(self.tokens[self.idx])
-        }
-    }
-
-    /// Get the previous token if it exists
-    fn prev_token(&self) -> Result<(Token, Position), String> {
-        if self.idx == 0 {
-            Err("no previous token".to_string())
-        } else {
-            Ok(self.tokens[self.idx - 1])
-        }
-    }
-
-    /// Peek at the next token if it exists
-    fn peek(&self) -> Result<(Token, Position), String> {
-        if self.idx == self.tokens.len() - 1 {
-            Err("no next token".to_string())
-        } else {
-            Ok(self.tokens[self.idx + 1])
-        }
-    }
-
     /// Consumes char tokens from the current position.
     /// Important: no assertions made here
     fn chars_to_string(&mut self) -> String {
@@ -296,6 +220,7 @@ impl Parser {
         key
     }
 
+    /// Convert the expected incoming characters to a string representing a digit
     fn digits_to_string(&mut self) -> String {
         let digits = self
             .tokens
@@ -318,6 +243,35 @@ impl Parser {
             })
             .collect::<String>();
         digits
+    }
+
+    /// Trim all of the whitespace since the parser does not care for it
+    fn remove_whitespace(&mut self) {
+        self.tokens = self
+            .tokens
+            .clone()
+            .into_iter()
+            .filter(|(x, _)| *x != Token::Whitespace && *x != Token::NewLine)
+            .collect();
+    }
+
+    /// Consume the next token if it exists
+    fn next_token(&mut self) -> Result<(), String> {
+        if self.end_of_tokens() {
+            Err("unterminated".to_string())
+        } else {
+            self.idx += 1;
+            Ok(())
+        }
+    }
+
+    /// Get the current token if it exists
+    fn current_token(&self) -> Result<(Token, Position), String> {
+        if self.end_of_tokens() {
+            Err("unexpected end of file".to_string())
+        } else {
+            Ok(self.tokens[self.idx])
+        }
     }
 
     fn end_of_tokens(&self) -> bool {
