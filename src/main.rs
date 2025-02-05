@@ -1,19 +1,33 @@
 use jsonp::parse::Parser;
 use jsonp::tokenize::Tokenizer;
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), ()> {
     let source = match std::fs::read_to_string("src/sample.json") {
         Ok(source) => source,
-        Err(err) => return Err(err.to_string()),
+        Err(err) => {
+            eprintln!("IO error: {}", err);
+            return Err(());
+        }
     };
 
     let mut tokenizer = Tokenizer::default();
-    let tokens = tokenizer.tokenize(&source)?;
+    let tokens = match tokenizer.tokenize(&source) {
+        Ok(toks) => toks,
+        Err(err) => {
+            eprintln!("Tokenizer error: {}", err);
+            return Err(());
+        }
+    };
 
     let mut parser = Parser::new(tokens);
-    let json = parser.parse()?;
-    dbg!(json);
-    println!("✅");
+    match parser.parse() {
+        Ok(json) => {
+            dbg!(json);
+        }
+        Err(err) => {
+            eprintln!("{}", err.0);
+        }
+    }
 
     Ok(())
 }

@@ -12,6 +12,8 @@ pub enum JsonValue {
     Empty,
 }
 
+pub struct SyntaxError(pub String);
+
 #[derive(Clone, Debug)]
 pub struct Parser {
     tokens: Vec<(Token, Position)>,
@@ -24,18 +26,18 @@ impl Parser {
     }
 
     /// Parse a JSON document
-    pub fn parse(&mut self) -> Result<JsonValue, String> {
+    pub fn parse(&mut self) -> Result<JsonValue, SyntaxError> {
         self.remove_whitespace();
         let (first_token, _) = self.current_token()?;
         match first_token {
             Token::LeftBracket => self.parse_array(),
             Token::LeftCurly => self.parse_object(),
-            _ => Err("invalid JSON document".to_string()),
+            _ => Err(self.err("invalid JSON document")),
         }
     }
 
     /// Parse a literal object
-    fn parse_object(&mut self) -> Result<JsonValue, String> {
+    fn parse_object(&mut self) -> Result<JsonValue, SyntaxError> {
         // Assume {
         self.assert_current(&[Token::LeftCurly])?;
         self.next_token()?;
@@ -52,11 +54,11 @@ impl Parser {
         {
             // Expect a key or an empty object
             self.assert_current(&[Token::Quote, Token::Comma])?;
-            let (next, pos) = self.current_token()?;
+            let (next, _) = self.current_token()?;
             let json = match next {
                 Token::Quote => self.parse_keyed_object(),
                 Token::Comma => break,
-                _ => Err(format!("unexpected token `{next}` at {}", pos)),
+                _ => Err(self.err("unterminated object")),
             };
 
             if !self.last_token() {
@@ -75,7 +77,7 @@ impl Parser {
 
     /// Parse a keyed object
     /// e.g., "key": {}
-    fn parse_keyed_object(&mut self) -> Result<JsonValue, String> {
+    fn parse_keyed_object(&mut self) -> Result<JsonValue, SyntaxError> {
         let key = self.parse_key()?;
         self.assert_current(&[Token::Colon])?;
         self.next_token()?;
@@ -86,14 +88,14 @@ impl Parser {
             Token::Char('t') | Token::Char('f') => self.parse_bool(),
             Token::Digit(_) | Token::Minus => self.parse_number(),
             Token::LeftBracket => self.parse_array(),
-            _ => Err(format!("unexpected token while parsing object")),
+            _ => Err(self.err("unexpected token while parsing object")),
         };
 
         Ok(JsonValue::KeyedObject(key, Box::new(json?)))
     }
 
     /// Parse an array of json values
-    fn parse_array(&mut self) -> Result<JsonValue, String> {
+    fn parse_array(&mut self) -> Result<JsonValue, SyntaxError> {
         let mut arr: Vec<JsonValue> = vec![];
         while self.current_token()?.0 != Token::RightBracket {
             self.next_token()?;
@@ -105,7 +107,7 @@ impl Parser {
                 Token::Digit(_) | Token::Minus => self.parse_number(),
                 Token::LeftBracket => self.parse_array(),
                 Token::RightBracket => break,
-                _ => Err(format!("unexpected token while parsing array: {}", next)),
+                _ => Err(self.err("unexpected token while parsing array")),
             };
 
             arr.push(json?);
@@ -116,24 +118,24 @@ impl Parser {
     }
 
     /// Parse a number, resulting in either a float or an integer
-    fn parse_number(&mut self) -> Result<JsonValue, String> {
+    fn parse_number(&mut self) -> Result<JsonValue, SyntaxError> {
         let num = self.digits_to_string();
         if num.contains('.') {
             match num.parse::<f64>() {
                 Ok(f) => Ok(JsonValue::Float(f)),
-                Err(_) => Err(format!("failed to parse float {}", num)),
+                Err(_) => Err(self.err("failed to parse float")),
             }
         } else {
             match num.parse::<i64>() {
                 Ok(i) => Ok(JsonValue::Int(i)),
-                Err(_) => Err(format!("failed to parse integer {}", num)),
+                Err(_) => Err(self.err("failed to parse integer")),
             }
         }
     }
 
     /// Parse a string literal
     /// e.g., "foo": "bar"
-    fn parse_string_literal(&mut self) -> Result<JsonValue, String> {
+    fn parse_string_literal(&mut self) -> Result<JsonValue, SyntaxError> {
         self.assert_current(&[Token::Quote])?;
         self.next_token()?;
 
@@ -147,20 +149,20 @@ impl Parser {
 
     /// Parse a bool
     /// e.g. "field": true
-    fn parse_bool(&mut self) -> Result<JsonValue, String> {
+    fn parse_bool(&mut self) -> Result<JsonValue, SyntaxError> {
         let str = self.chars_to_string();
         if str == "true" {
             Ok(JsonValue::Bool(true))
         } else if str == "false" {
             Ok(JsonValue::Bool(false))
         } else {
-            Err("failed to parse boolean".to_string())
+            Err(self.err("failed to parse boolean"))
         }
     }
 
     /// Parse a key (property name)
     /// Consumes: `"key" :`, leaves next token as e.g., `{`
-    fn parse_key(&mut self) -> Result<String, String> {
+    fn parse_key(&mut self) -> Result<String, SyntaxError> {
         if self.assert_current(&[Token::Comma]).is_ok() {
             self.next_token()?;
         }
@@ -176,7 +178,7 @@ impl Parser {
     }
 
     /// Assert that the current token is one of the expected ones
-    fn assert_current(&self, expected: &[Token]) -> Result<(), String> {
+    fn assert_current(&self, expected: &[Token]) -> Result<(), SyntaxError> {
         let curr = self.current_token()?;
 
         for ex in expected {
@@ -196,10 +198,7 @@ impl Parser {
             .collect::<Vec<_>>()
             .join(", ");
 
-        Err(format!(
-            "Expected {} but got {} at {}",
-            expected_list, curr.0, curr.1
-        ))
+        Err(self.err(format!("expected {} but got {}", expected_list, curr.0).as_str()))
     }
 
     /// Consumes char tokens from the current position.
@@ -256,9 +255,9 @@ impl Parser {
     }
 
     /// Consume the next token if it exists
-    fn next_token(&mut self) -> Result<(), String> {
+    fn next_token(&mut self) -> Result<(), SyntaxError> {
         if self.end_of_tokens() {
-            Err("unterminated".to_string())
+            Err(self.err("unterminated"))
         } else {
             self.idx += 1;
             Ok(())
@@ -266,11 +265,21 @@ impl Parser {
     }
 
     /// Get the current token if it exists
-    fn current_token(&self) -> Result<(Token, Position), String> {
+    fn current_token(&self) -> Result<(Token, Position), SyntaxError> {
         if self.end_of_tokens() {
-            Err("unexpected end of file".to_string())
+            Err(self.err("unexpected end of file"))
         } else {
             Ok(self.tokens[self.idx])
+        }
+    }
+
+    fn err(&self, msg: &str) -> SyntaxError {
+        if self.end_of_tokens() {
+            // A bit ugly, but allows current_token to crash
+            SyntaxError("Syntax error: unexpected end of file".to_string())
+        } else {
+            let (_, pos) = self.tokens[self.idx];
+            SyntaxError(format!("Syntax error: {} at {}", msg, pos))
         }
     }
 
