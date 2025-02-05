@@ -34,6 +34,7 @@ fn main() -> Result<(), ()> {
         }
         Err(err) => {
             eprintln!("{}", err.0);
+            return Err(())
         }
     }
 
